@@ -10,9 +10,9 @@ You will need to search for "blank_" and replace the related tokens with your in
 # Dependencies
 
 - Rails 3.2 (you could use ~> 3.0)
-- nginx
+- [nginx](http://nginx.org/download/aws_nginx_setup.sh)
 - chef
-- LocomotiveCMS
+- [LocomotiveCMS](http://www.locomotivecms.com)
 - [pygmentize](http://pygments.org/docs/cmdline/)
 - [vim.ana](https://github.com/newalexandria/vim.ana)
 
@@ -23,21 +23,21 @@ The following AWS resources will be provisioned when you run this CloudFormation
 ## Resources
 ### Instances
 
-- MongoInstance:  EC2 t1.micro
-- WebServer:  EC2 t1.micro
+- MongoInstance:  *EC2 t1.micro*
+- WebServer:  *EC2 t1.micro*
 
 ### Security
 
-- MongoSecurityGroup: mongo instance SSH
-- MongodIngress: mongo data
-- StatusIngress: mondo updates
-- FrontendSecurityGroup: web instance SSH
+- MongoSecurityGroup: *mongo instance SSH*
+- MongodIngress: *mongo data*
+- StatusIngress: *mondo updates*
+- FrontendSecurityGroup: *web instance SSH*
 
 ### EBS
 
 - MongoVolume1
 
-# Not Provisioned
+## Not Provisioned
 
 The following are currently excluded because they contain data specific to anyones' individual setup.  
 
