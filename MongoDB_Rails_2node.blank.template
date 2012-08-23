@@ -1,0 +1,508 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  
+  "Description" : "Ruby on Rails stack using a single EC2 instance with a local MySQL database and a MongoDB store on another EC2 instance.",
+  
+  "Parameters" : {
+    "KeyName" : {
+        "Description" : "Name of an existing EC2 KeyPair to enable SSH access",
+        "Type" : "String",
+        "Default" : "blank_key_name"
+    },
+
+    "DBRootPassword": {
+      "NoEcho": "true",
+      "Description" : "Root password for MySQL",
+      "Default" : "admin",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "AllowedPattern" : "[a-zA-Z0-9]*",
+      "ConstraintDescription" : "must contain only alphanumeric characters."
+    },
+
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "t1.micro",
+      "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "VolumeSize" : {
+        "Description" : "Volume size for each EBS volume",
+        "Type" : "Number",
+        "Default" : "1"
+    }
+  },
+    
+  "Mappings" : {
+      "AWSInstanceType2Arch" : {
+        "t1.micro"    : { "Arch" : "64" },
+        "m1.small"    : { "Arch" : "64" },
+        "m1.medium"   : { "Arch" : "64" },
+        "m1.large"    : { "Arch" : "64" },
+        "m1.xlarge"   : { "Arch" : "64" },
+        "m2.xlarge"   : { "Arch" : "64" },
+        "m2.2xlarge"  : { "Arch" : "64" },
+        "m2.4xlarge"  : { "Arch" : "64" },
+        "c1.medium"   : { "Arch" : "64" },
+        "c1.xlarge"   : { "Arch" : "64" },
+        "cc1.4xlarge" : { "Arch" : "64HVM" },
+        "cc2.8xlarge" : { "Arch" : "64HVM" },
+        "cg1.4xlarge" : { "Arch" : "64HVM" }
+      },
+
+      "AWSRegionArch2AMI" : {
+          "us-east-1"      : { "32" : "ami-31814f58", "64" : "ami-1b814f72", "64HVM" : "ami-0da96764" },
+          "us-west-2"      : { "32" : "ami-38fe7308", "64" : "ami-30fe7300", "64HVM" : "NOT_YET_SUPPORTED" },
+          "us-west-1"      : { "32" : "ami-11d68a54", "64" : "ami-1bd68a5e", "64HVM" : "NOT_YET_SUPPORTED" },
+          "eu-west-1"      : { "32" : "ami-973b06e3", "64" : "ami-953b06e1", "64HVM" : "NOT_YET_SUPPORTED" },
+          "ap-southeast-1" : { "32" : "ami-b4b0cae6", "64" : "ami-beb0caec", "64HVM" : "NOT_YET_SUPPORTED" },
+          "ap-northeast-1" : { "32" : "ami-0644f007", "64" : "ami-0a44f00b", "64HVM" : "NOT_YET_SUPPORTED" },
+          "sa-east-1"      : { "32" : "ami-3e3be423", "64" : "ami-3c3be421", "64HVM" : "NOT_YET_SUPPORTED" }
+      }
+  },
+
+  "Resources" : {
+      "MongoSecurityGroup" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "Properties" : {
+              "GroupDescription" : "MongoDB security group",
+              "SecurityGroupIngress" : [ 
+                  {
+                      "IpProtocol" : "tcp",
+                      "FromPort" : "22",
+                      "ToPort" : "22",
+                      "CidrIp" : "0.0.0.0/0"
+                  }
+              ]
+          }
+      },
+
+      "MongodIngress" : {
+          "Type" : "AWS::EC2::SecurityGroupIngress",
+          "Properties" : {
+              "GroupName" : { "Ref" : "MongoSecurityGroup" },
+              "IpProtocol" : "tcp",
+              "FromPort" : "27017",
+              "ToPort" : "27017",
+              "SourceSecurityGroupName" : { "Ref" : "MongoSecurityGroup" }
+          }
+      },
+
+      "StatusIngress" : {
+          "Type" : "AWS::EC2::SecurityGroupIngress",
+          "Properties" : {
+              "GroupName" : { "Ref" : "MongoSecurityGroup" },
+              "IpProtocol" : "tcp",
+              "FromPort" : "28017",
+              "ToPort" : "28017",
+              "SourceSecurityGroupName" : { "Ref" : "MongoSecurityGroup" }
+          }
+      },
+
+      "CfnUser" : {
+          "Type" : "AWS::IAM::User",
+          "Properties" : {
+              "Path": "/",
+              "Policies": [ {
+                  "PolicyName": "root",
+                  "PolicyDocument": { "Statement": [ {
+                      "Effect":"Allow",
+                      "Action":"cloudformation:DescribeStackResource",
+                      "Resource":"*"
+                  } ] }
+              } ]
+          }
+      },
+
+      "HostKeys" : {
+          "Type" : "AWS::IAM::AccessKey",
+          "Properties" : {
+              "UserName" : { "Ref" : "CfnUser" }
+          }
+      },
+
+      "MongoInstance" : {
+          "Type" : "AWS::EC2::Instance",
+          "Metadata" : {
+              "AWS::CloudFormation::Init" : {
+                  "config" : {
+                      "packages" : {
+                          "yum" : {
+                              "mdadm"    : [],
+                              "sysstat"  : [],
+                              "rubygems" : []
+                          },
+  
+                          "rubygems" : {
+                            "bundler"      : [],
+                            "chef"         : []
+                          }
+                      },
+                      "files" : {
+                          "/etc/yum.repos.d/10gen.repo" : {
+                              "content" : { "Fn::Join" : ["", [
+                                  "[10gen]\n",
+                                  "name=10gen Repository\n",
+                                  "baseurl=http://downloads-distro.mongodb.org/repo/redhat/os/x86_64\n",
+                                  "gpgcheck=0\n"
+                              ] ] },
+                              "mode" : "000644",
+                              "owner" : "root",
+                              "group" : "root"
+                          },
+                          "/etc/chef/solo.rb" : {
+                            "content" : { "Fn::Join" : ["", [
+                              "log_level :info\n",
+                              "log_location STDOUT\n",
+                              "file_cache_path \"/var/chef-solo\"\n",
+                              "cookbook_path \"/var/chef-solo/cookbooks\"\n",
+                              "json_attribs \"/etc/chef/node.json\"\n",
+                              "recipe_url \"", { "Ref" : "RecipeURL" }, "\"\n"
+                            ]] },
+                            "mode" : "000644",
+                            "owner" : "root",
+                            "group" : "wheel"
+                          },
+                          "/etc/chef/node.json" : {
+                            "content" : { "Fn::Join" : ["", [
+                              :
+                            ]] },
+                            "mode" : "000644",
+                            "owner" : "root",
+                            "group" : "wheel"
+                          }                          
+                      }
+                  }
+              }
+          },
+
+          "Properties" : {
+              "InstanceType" : { "Ref" : "InstanceType" },
+              "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" }, 
+                  { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+              "SecurityGroups" : [ { "Ref" : "MongoSecurityGroup" } ],
+              "KeyName" : { "Ref" : "KeyName" },
+              "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                  "#!/bin/bash\n",
+                  "yum update -y aws-cfn-bootstrap\n",
+
+                  "## Error reporting helper function\n",
+                  "function error_exit\n",
+                  "{\n",
+                  "   /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandleMongoInstance" }, "'\n",
+                  "   exit 1\n",
+                  "}\n",
+
+                  "# Vim Harnass\n",
+                  "cd ~; git clone git://github.com/NewAlexandria/vim.ana.git .vim.ana\n",
+                  ".vim.ana/install.sh",
+        
+                  "## Initialize CloudFormation bits\n",
+                  "/opt/aws/bin/cfn-init -v -s ", { "Ref" : "AWS::StackName" }, " -r MongoInstance",
+                  "   --access-key ",  { "Ref" : "HostKeys" },
+                  "   --secret-key ", {"Fn::GetAtt": ["HostKeys", "SecretAccessKey"]},
+                  "   --region ", { "Ref" : "AWS::Region" }, " > /tmp/cfn-init.log 2>&1 || error_exit $(</tmp/cfn-init.log)\n",
+
+                  "## Waiting for EBS mounts to become available\n",
+                  "while [ ! -e /dev/sdh1 ]; do echo waiting for /dev/sdh1 to attach; sleep 10; done\n",
+                  "# while [ ! -e /dev/sdh2 ]; do echo waiting for /dev/sdh2 to attach; sleep 10; done\n",
+                  "# while [ ! -e /dev/sdh3 ]; do echo waiting for /dev/sdh3 to attach; sleep 10; done\n",
+                  "# while [ ! -e /dev/sdh4 ]; do echo waiting for /dev/sdh4 to attach; sleep 10; done\n",
+
+                  "yum -y install mongo-10gen-server > /tmp/yum-mongo.log 2>&1\n",
+
+                  "## Create RAID10 and persist configuration\n",
+                  "# mdadm --verbose --create /dev/md0 --level=10 --chunk=256 --raid-devices=4 /dev/sdh1 /dev/sdh2 /dev/sdh3 /dev/sdh4 > /tmp/mdadm.log 2>&1\n",
+                  "# echo '`mdadm --detail --scan`' | tee -a /etc/mdadm.conf\n",
+
+                  "## Set read-ahead on each device\n",
+                  "# blockdev --setra 128 /dev/md0\n",
+                  "blockdev --setra 128 /dev/sdh1\n",
+                  "# blockdev --setra 128 /dev/sdh2\n",
+                  "# blockdev --setra 128 /dev/sdh3\n",
+                  "# blockdev --setra 128 /dev/sdh4\n",
+
+                  "## Create physical and logical volumes\n",
+                  "# dd if=/dev/zero of=/dev/md0 bs=512 count=1\n",
+                  "# pvcreate /dev/md0\n",
+                  "# vgcreate vg0 /dev/md0\n",
+                  "dd if=/dev/zero of=/dev/sdh1 bs=512 count=1\n",
+                  "pvcreate /dev/sdh1\n",
+                  "vgcreate vg0 /dev/sdh1\n",
+                  "lvcreate -l 90%vg -n data vg0\n",
+                  "lvcreate -l 5%vg -n log vg0\n",
+                  "lvcreate -l 5%vg -n journal vg0\n",
+
+                  "## Create filesystems and mount point info\n",
+                  "mke2fs -t ext4 -F /dev/vg0/data > /tmp/mke2fs1.log 2>&1\n",
+                  "mke2fs -t ext4 -F /dev/vg0/log > /tmp/mke2fs2.log 2>&1\n",
+                  "mke2fs -t ext4 -F /dev/vg0/journal > /tmp/mke2fs3.log 2>&1\n",
+
+                  "mkdir /data\n",
+                  "mkdir /log\n",
+                  "mkdir /journal\n",
+
+                  "echo '/dev/vg0/data /data ext4 defaults,auto,noatime,noexec 0 0' | tee -a /etc/fstab\n",
+                  "echo '/dev/vg0/log /log ext4 defaults,auto,noatime,noexec 0 0' | tee -a /etc/fstab\n",
+                  "echo '/dev/vg0/journal /journal ext4 defaults,auto,noatime,noexec 0 0' | tee -a /etc/fstab\n",
+                  
+                  "mount /data > /tmp/mount1.log 2>&1\n",
+                  "mount /log > /tmp/mount2.log 2>&1\n",
+                  "mount /journal > /tmp/mount3.log 2>&1\n",
+
+                  "ln -s /journal /data/journal\n",
+
+                  "chown -R mongod:mongod /data > /tmp/chown1.log 2>&1\n",
+                  "chown -R mongod:mongod /log > /tmp/chown2.log 2>&1\n",
+                  "chown -R mongod:mongod /journal > /tmp/chown3.log 2>&1\n",
+
+                  "## Update mongod configuration\n",
+                  "cat <<EOF > /etc/mongod.conf\n",
+                  "logpath=/log/mongod.log\n",
+                  "logappend=true\n",
+                  "fork=true\n",
+                  "dbpath=/data\n",
+                  "rest=true\n",
+                  "EOF\n",
+
+                  "## Start mongod\n",
+                  "/etc/init.d/mongod start > /tmp/mongod-start.log 2>&1\n",
+                  
+                  "## Set Chef \b",
+                  "chef-solo\n",
+
+                  "## CloudFormation signal that setup is complete\n",
+                  "/opt/aws/bin/cfn-signal -e 0 -r \"MongoInstance setup complete\" '", { "Ref" : "WaitHandleMongoInstance" }, "'\n"
+              ] ] } }
+          }
+      },
+
+      "MongoVolume1" : {
+          "Type" : "AWS::EC2::Volume",
+          "Properties" : {
+              "Size" : { "Ref" : "VolumeSize" },
+              "AvailabilityZone" : { "Fn::GetAtt" : [ "MongoInstance", "AvailabilityZone" ]}
+          }
+      },
+
+      "MongoVolumeMount1" : {
+          "Type" : "AWS::EC2::VolumeAttachment",
+          "Properties" : {
+              "InstanceId" : { "Ref" : "MongoInstance" },
+              "VolumeId" : { "Ref" : "MongoVolume1" },
+              "Device" : "/dev/sdh1"
+          }
+      },
+
+      "WaitHandleMongoInstance" : {
+          "Type" : "AWS::CloudFormation::WaitConditionHandle",
+          "Properties" : {}
+      },
+
+      "WaitConditionMongoInstance" : {
+          "Type" : "AWS::CloudFormation::WaitCondition",
+          "DependsOn" : "MongoInstance",
+          "Properties" : {
+              "Handle" : { "Ref" : "WaitHandleMongoInstance" },
+              "Timeout" : "300"
+          }
+      },
+
+      "FrontendSecurityGroup" : {
+        "Type" : "AWS::EC2::SecurityGroup",
+        "Properties" : {
+          "GroupDescription" : "Enable HTTP access via port 3000",
+          "SecurityGroupIngress" : [
+            { 
+              "IpProtocol" : "tcp", 
+              "FromPort" : "3000", 
+              "ToPort" : "3000", 
+              "CidrIp" : "0.0.0.0/0"
+            },
+            {
+                "IpProtocol" : "tcp",
+                "FromPort" : "22",
+                "ToPort" : "22",
+                "CidrIp" : "0.0.0.0/0"
+            }              
+          ]
+        }      
+      },
+
+      "WaitHandle" : {
+        "Type" : "AWS::CloudFormation::WaitConditionHandle"
+      },
+  
+      "WaitCondition" : {
+        "Type" : "AWS::CloudFormation::WaitCondition",
+        "DependsOn" : "WebServer",
+        "Properties" : {
+          "Handle" : {"Ref" : "WaitHandle"},
+          "Timeout" : "1500"
+        }
+      },    
+  
+      "WebServer": {  
+        "Type": "AWS::EC2::Instance",
+        "Metadata" : {
+          "AWS::CloudFormation::Init" : {
+            "config" : {
+              "packages" : {
+                "yum" : {
+                  "gcc-c++"         : [],
+                  "make"            : [],
+                  "ruby-devel"      : [],
+                  "rubygems"        : [],
+                  "mysql"           : [],
+                  "mysql-server"    : [],
+                  "mysql-devel"     : [],
+                  "mysql-libs"      : [],
+                  "mdadm"           : [],
+                  "sysstat"         : [],
+                  "screen"          : [],
+                  "python"          : [],
+                  "python-pygments" : [],
+                  "git"             : []
+                },
+  
+                "rubygems" : {
+                  "rack"         : ["1.3.6"],
+                  "execjs"       : [],
+                  "therubyracer" : [],
+                  "bundler"      : [],
+                  "chef"         : [],
+                  "rails"        : []
+                }
+              },
+  
+              "sources" : {
+                "/home/ec2-user/sample" : "https://s3.amazonaws.com/cloudformation-examples/CloudFormationRailsSample.zip"
+              },
+  
+              "files" : {
+                "/home/ec2-user/sample/config/database.yml" : {
+                 "content" : { "Fn::Join" : ["", [
+                    "development:\n",
+                    "  adapter: mysql2\n",
+                    "  encoding: utf8\n",
+                    "  reconnect: false\n",
+                    "  pool: 5\n",
+                    "  database: railsdb\n",
+                    "  username: root\n",
+                    "  password: ", { "Ref" : "DBRootPassword" }, "\n",
+                    "  socket: /var/lib/mysql/mysql.sock\n"
+                    ]]},
+                  "mode"  : "000644",
+                  "owner" : "root",
+                  "group" : "root"
+                },
+                "/etc/chef/solo.rb" : {
+                  "content" : { "Fn::Join" : ["", [
+                    "log_level :info\n",
+                    "log_location STDOUT\n",
+                    "file_cache_path \"/var/chef-solo\"\n",
+                    "cookbook_path \"/var/chef-solo/cookbooks\"\n",
+                    "json_attribs \"/etc/chef/node.json\"\n",
+                    "recipe_url \"", { "Ref" : "RecipeURL" }, "\"\n"
+                  ]] },
+                  "mode" : "000644",
+                  "owner" : "root",
+                  "group" : "wheel"
+                },
+                "/etc/chef/node.json" : {
+                  "content" : { "Fn::Join" : ["", [
+                    :
+                  ]] },
+                  "mode" : "000644",
+                  "owner" : "root",
+                  "group" : "wheel"
+                }                
+              },
+  
+              "services" : {
+                "sysvinit" : {  
+                  "mysqld" : {
+                    "enabled"       : "true",
+                    "ensureRunning" : "true"                
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Properties": {
+          "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                            { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+          "InstanceType"   : { "Ref" : "InstanceType" },
+          "SecurityGroups" : [ {"Ref" : "FrontendSecurityGroup"} ],
+          "KeyName" : { "Ref" : "KeyName" },
+          "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+            "#!/bin/bash -v\n",
+            "yum update -y aws-cfn-bootstrap\n",
+  
+            "# Vim Harnass\n",
+            "cd ~; git clone git://github.com/NewAlexandria/vim.ana.git .vim.ana\n",
+            ".vim.ana/install.sh",
+  
+            "# Helper function\n",
+            "function error_exit\n",
+            "{\n",
+            "  /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandle" }, "'\n",
+            "  exit 1\n",
+            "}\n",
+  
+            "# Install Rails packages\n",
+            "/opt/aws/bin/cfn-init -s ", { "Ref" : "AWS::StackName" }, " -r WebServer ",
+            "    --access-key ",  { "Ref" : "HostKeys" },
+            "    --secret-key ", {"Fn::GetAtt": ["HostKeys", "SecretAccessKey"]},
+            "    --region ", { "Ref" : "AWS::Region" }, " > /tmp/cfn-init.log 2>&1 || error_exit $(</tmp/cfn-init.log)\n",
+  
+            "# Setup MySQL root password and create a user\n",
+            "mysqladmin -u root password '", { "Ref" : "DBRootPassword" }, "' || error_exit 'Failed to initialize root password'\n",
+  
+            "# Install anu other Gems, create the database and run a migration\n",
+            "cd /home/ec2-user/sample\n",
+            "bundle install  || error_exit 'Failed to install bundle'\n",
+            "rake db:create  || error_exit 'Failed to create database'\n",
+            "rake db:migrate || error_exit 'Failed to execute database migration'\n",
+  
+            "# Startup the rails server\n",
+            "rails server -d\n", 
+            "echo \"cd /home/ec2-user/sample\" >> /etc/rc.local\n",  
+            "echo \"rails server -d\" >> /etc/rc.local\n",  
+  
+            "## Set Chef \b",
+            "chef-solo\n",
+
+            "# All is well so signal success\n",
+            "/opt/aws/bin/cfn-signal -e 0 -r \"Rails application setup complete\" '", { "Ref" : "WaitHandle" }, "'\n"
+          ]]}}        
+        }
+      }
+  },
+
+  "Outputs" : {
+      "InstanceName" : {
+          "Value" : { "Fn::GetAtt" : [ "MongoInstance", "PublicDnsName" ] },
+          "Description" : "public DNS name of the new MongoInstance"
+      },
+      "WebsiteURL" : {
+        "Value" : { 
+          "Fn::Join" : [ 
+            "", 
+            [  "blank_server_name", 
+               { "Fn::GetAtt" : [ 
+                 "WebServer", 
+                 "PublicDnsName" ]
+               }, 
+               ":3000" 
+            ]
+          ] 
+        },
+        "Description" : "URL for newly created Rails application"
+      }
+    }
+}

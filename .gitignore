@@ -1,16 +1,27 @@
+# Configs
 *.rbc
 *.sassc
 .sass-cache
-capybara-*.html
-.rspec
-/.bundle
-/vendor/bundle
-/log/*
-/tmp/*
 /db/*.sqlite3
 /public/system/*
+
+/.bundle
+/vendor/bundle
+
+# Monitors
+/log/*
+
+# Testing
+capybara-*.html
+.rspec
 /coverage/
 /spec/tmp/*
-**.orig
 rerun.txt
 pickle-email-*.html
+
+# Scratch
+**.orig
+/tmp/*
+
+# Sources
+*.live.template
