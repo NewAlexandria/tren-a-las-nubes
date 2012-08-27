@@ -5,7 +5,7 @@ tren-a-las-nubes
 
 AWS package for deploying [Locomotive](http://www.locomotivecms.com) with [CloudFormation](http://aws.amazon.com/cloudformation/)
 
-This script is simple launch-point for those looking to setup a Mongo-served rails CMS on Amazon's AWS infrastructure.  By using Amazon's CloudFormation templates, you can skillfully comprehend your resources, manage usage, track growth, and automate scale.
+This script is simple launch-point for those looking to setup a Mongo-served rails CMS on Amazon's AWS infrastructure.  By using Amazon's CloudFormation templates, you can skillfully *comprehend* your resources, *manage* usage, *track* growth, and *automate* scale.
 
 You will need to search for "blank_" and replace the related tokens with your info (ssh keys, web domains, etc.)
 
@@ -20,7 +20,7 @@ You will need to search for "blank_" and replace the related tokens with your in
 
 # Provisions
 
-The following AWS resources will be provisioned when you run this CloudFormation template:
+The following AWS resources will be provisioned when you run this CloudFormation template.  If you have a new AWS account, your usage of these resources may fall under the free trial limits.
 
 ## Resources
 ### Instances
@@ -55,6 +55,7 @@ If that's confusing to you, consider the major use-case for automating the creat
 # What's Coming
 
 - Template blanks for AWS users and routes
-- Chef recipes for configuring things past the bootstrap (nginx, locomotive
+- Chef recipes for configuring things past the bootstrap (nginx, locomotive)
 - Deploy dependencies to standardized places
+- rbenv or rvm (rbenv rubies are missing readline out-of-box and take a long time to recompile on a t1.micro. rvm untested)
 - CLI inputs for vim and less augmentation 
