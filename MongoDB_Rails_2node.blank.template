@@ -352,21 +352,26 @@
             "config" : {
               "packages" : {
                 "yum" : {
-                  "gcc-c++"         : [],
-                  "make"            : [],
-                  "ruby-devel"      : [],
-                  "rubygems"        : [],
-                  "mysql"           : [],
-                  "mysql-server"    : [],
-                  "mysql-devel"     : [],
-                  "mysql-libs"      : [],
-                  "mdadm"           : [],
-                  "sysstat"         : [],
-                  "screen"          : [],
-                  "python"          : [],
-                  "python-pygments" : [],
-                  "git"             : []
-                },
+                  "gcc-c++"                  : [],
+                  "make"                     : [],
+                  "ruby-devel"               : [],
+                  "rubygems"                 : [],
+                  "ImageMagick.x86_64"       : [],
+                  "ImageMagick-devel.x86_64" : [],
+                  "ruby-RMagick.x86_64"      : [],
+                  "libxml2-devel.x86_64"     : [],
+                  "libxslt-devel.x86_64"     : [],
+                  "mysql"                    : [],
+                  "mysql-server"             : [],
+                  "mysql-devel"              : [],
+                  "mysql-libs"               : [],
+                  "mdadm"                    : [],
+                  "sysstat"                  : [],
+                  "screen"                   : [],
+                  "python"                   : [],
+                  "python-pygments"          : [],
+                  "git"                      : []
+                  },
   
                 "rubygems" : {
                   "rack"         : ["1.3.6"],

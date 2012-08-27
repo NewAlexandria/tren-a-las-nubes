@@ -3,9 +3,9 @@ tren-a-las-nubes
 *[(Train to the clouds)](http://en.wikipedia.org/wiki/Tren_a_las_Nubes)*
 
 
-AWS package for deploying Locomotive with CloudFormation
+AWS package for deploying [Locomotive](http://www.locomotivecms.com) with [CloudFormation](http://aws.amazon.com/cloudformation/)
 
-This script is simple launch-point for those looking to setup a Mongo-served rails app on Amazon's AWS infrastructure.  It is particularly designed to work with [Locomotive](http://doc.locomotivecms.com/) - a rails CMS.  By using Amazon's CloudFormation templates, you can skillfully manage your usage, track growth, and automate scale.
+This script is simple launch-point for those looking to setup a Mongo-served rails CMS on Amazon's AWS infrastructure.  By using Amazon's CloudFormation templates, you can skillfully comprehend your resources, manage usage, track growth, and automate scale.
 
 You will need to search for "blank_" and replace the related tokens with your info (ssh keys, web domains, etc.)
 
@@ -41,7 +41,12 @@ The following AWS resources will be provisioned when you run this CloudFormation
 
 ## Not Provisioned
 
-The following are currently excluded because they contain data specific to anyones' individual setup.  
+The following are currently excluded because;
+
+1. the data they contain specific to an individual setup.  
+2. reaffirming #1, you cannot make a template for new HostedZones (DNS base NS records).
+
+If that's confusing to you, consider the major use-case for automating the creation of DNS entries: spammers and search-engine manipulators whom create profuse domain records..
 
 - IAM Profile
 - 53Routes (DNS)
